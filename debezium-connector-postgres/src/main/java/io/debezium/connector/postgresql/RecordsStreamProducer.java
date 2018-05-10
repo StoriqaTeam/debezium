@@ -50,7 +50,7 @@ public class RecordsStreamProducer extends RecordsProducer {
 
     private static final String CONTEXT_NAME = "records-stream-producer";
 
-    private final ExecutorService executorService;
+    private ExecutorService executorService;
     private final ReplicationConnection replicationConnection;
     private final AtomicReference<ReplicationStream> replicationStream;
     private PgConnection typeResolverConnection = null;
@@ -69,7 +69,6 @@ public class RecordsStreamProducer extends RecordsProducer {
     public RecordsStreamProducer(PostgresTaskContext taskContext,
                                  SourceInfo sourceInfo) {
         super(taskContext, sourceInfo);
-        executorService = Threads.newSingleThreadExecutor(PostgresConnector.class, taskContext.config().serverName(), CONTEXT_NAME);
         this.replicationStream = new AtomicReference<>();
         try {
             this.replicationConnection = taskContext.createReplicationConnection();
@@ -82,10 +81,8 @@ public class RecordsStreamProducer extends RecordsProducer {
     protected synchronized void start(BlockingConsumer<ChangeEvent> eventConsumer, Consumer<Throwable> failureConsumer)  {
         LoggingContext.PreviousContext previousContext = taskContext.configureLoggingContext(CONTEXT_NAME);
         try {
-            if (executorService.isShutdown()) {
-                logger.info("Streaming will not start, stop already requested");
-                return;
-            }
+            executorService = Threads.newSingleThreadExecutor(PostgresConnector.class, taskContext.config().serverName(), CONTEXT_NAME);
+
             if (sourceInfo.hasLastKnownPosition()) {
                 // start streaming from the last recorded position in the offset
                 Long lsn = sourceInfo.lsn();

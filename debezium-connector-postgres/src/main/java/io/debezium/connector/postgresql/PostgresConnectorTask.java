@@ -113,7 +113,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
                 .loggingContextSupplier(() -> taskContext.configureLoggingContext(CONTEXT_NAME))
                 .build();
 
-            producer.start(changeEventQueue::enqueue, changeEventQueue::producerFailure);
+            producer.start(changeEventQueue::enqueue, changeEventQueue::setProducerFailure);
             running.compareAndSet(false, true);
         }  catch (SQLException e) {
             throw new ConnectException(e);
@@ -135,7 +135,30 @@ public class PostgresConnectorTask extends BaseSourceTask {
     @Override
     public void commit() throws InterruptedException {
         if (running.get()) {
-            producer.commit(lastProcessedLsn);
+            if (changeEventQueue.getProducerFailure() != null) {
+                changeEventQueue.setProducerFailure(null);
+
+                logger.warn("Producer error occurred, stopping producer");
+                producer.stop();
+
+                boolean restarted = false;
+                while (!restarted) {
+                    try {
+                        long delay = 10000L;
+                        logger.info("Trying to restart producer in " + delay + " ms");
+                        Thread.sleep(delay);
+                        
+                        logger.info("Restarting producer");
+                        producer.start(changeEventQueue::enqueue, changeEventQueue::setProducerFailure);
+                        logger.info("Successfully restarted producer");
+                        restarted = true;
+                    } catch (Throwable t) {
+                        logger.error("Unable to restart producer", t);
+                    }
+                }
+            } else {
+                producer.commit(lastProcessedLsn);
+            }
         }
     }
 

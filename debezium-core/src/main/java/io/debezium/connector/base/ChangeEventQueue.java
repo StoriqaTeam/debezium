@@ -146,7 +146,6 @@ public class ChangeEventQueue<T> {
             List<T> records = new ArrayList<>();
             final Timer timeout = Threads.timer(Clock.SYSTEM, Temporals.max(pollInterval, ConfigurationDefaults.RETURN_CONTROL_INTERVAL));
             while (!timeout.expired() && queue.drainTo(records, maxBatchSize) == 0) {
-                throwProducerFailureIfPresent();
 
                 LOGGER.debug("no records available yet, sleeping a bit...");
                 // no records yet, so wait a bit
@@ -159,7 +158,11 @@ public class ChangeEventQueue<T> {
         }
     }
 
-    public void producerFailure(final Throwable producerFailure) {
+    public Throwable getProducerFailure() {
+        return producerFailure;
+    }
+
+    public void setProducerFailure(final Throwable producerFailure) {
         this.producerFailure = producerFailure;
     }
 
