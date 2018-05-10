@@ -55,9 +55,22 @@ public class PostgresConnectorTask extends BaseSourceTask {
         PostgresConnectorConfig connectorConfig = new PostgresConnectorConfig(config);
 
         // Create type registry
-        TypeRegistry typeRegistry;
-        try (final PostgresConnection connection = new PostgresConnection(connectorConfig.jdbcConfig())) {
-            typeRegistry = connection.getTypeRegistry();
+        TypeRegistry typeRegistry = null;
+        boolean typeRegistryInitialized = false;
+        while (!typeRegistryInitialized) {
+            try {
+                long delay = 10000L;
+                logger.info("Trying to initialize type registry in " + delay + " ms");
+                Thread.sleep(delay);
+                try (final PostgresConnection connection = new PostgresConnection(connectorConfig.jdbcConfig())) {
+                    typeRegistry = connection.getTypeRegistry();
+                    typeRegistryInitialized = true;
+                } catch (Throwable t) {
+                    logger.error("Cannot initialize type registry", t);
+                }
+            } catch (InterruptedException e) {
+                logger.warn("Exception while waiting to initialize type registry");
+            }
         }
 
         // create the task context and schema...
@@ -147,7 +160,7 @@ public class PostgresConnectorTask extends BaseSourceTask {
                         long delay = 10000L;
                         logger.info("Trying to restart producer in " + delay + " ms");
                         Thread.sleep(delay);
-                        
+
                         logger.info("Restarting producer");
                         producer.start(changeEventQueue::enqueue, changeEventQueue::setProducerFailure);
                         logger.info("Successfully restarted producer");
